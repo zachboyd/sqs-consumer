@@ -11,16 +11,14 @@ type ReceieveMessageResponse = PromiseResult<SQS.Types.ReceiveMessageResult, AWS
 type SQSMessage = SQS.Types.Message;
 type ReceiveMessageRequest = SQS.Types.ReceiveMessageRequest;
 
-const requiredOptions = [
-  'queueUrl',
-  // only one of handleMessage / handleMessagesBatch is required
-  'handleMessage|handleMessageBatch'
-];
-
 interface TimeoutResonse {
   timeout: NodeJS.Timeout;
   pending: Promise<void>;
 }
+
+type MessageHandlerIndividual = (message: SQSMessage) => Promise<void>;
+type MessageHandlerBatch = (message: SQSMessage[]) => Promise<void>;
+type MessageHandler = MessageHandlerIndividual | MessageHandlerBatch;
 
 function createTimeout(duration: number): TimeoutResonse[] {
   let timeout;
@@ -33,13 +31,6 @@ function createTimeout(duration: number): TimeoutResonse[] {
 }
 
 function assertOptions(options: ConsumerOptions): void {
-  requiredOptions.forEach((option) => {
-    const possibilities = option.split('|');
-    if (!possibilities.find((p) => options[p])) {
-      throw new Error(`Missing SQS consumer option [ ${possibilities.join(' or ')} ].`);
-    }
-  });
-
   if (options.batchSize > 10 || options.batchSize < 1) {
     throw new Error('SQS batchSize option must be between 1 and 10.');
   }
@@ -69,7 +60,9 @@ function hasMessages(response: ReceieveMessageResponse): boolean {
 }
 
 export interface ConsumerOptions {
-  queueUrl?: string;
+  handleMessage: MessageHandler;
+  queueUrl: string;
+  isBatchHandler?: boolean;
   attributeNames?: string[];
   messageAttributeNames?: string[];
   stopped?: boolean;
@@ -81,15 +74,13 @@ export interface ConsumerOptions {
   sqs?: SQS;
   region?: string;
   handleMessageTimeout?: number;
-  handleMessage?(message: SQSMessage): Promise<void>;
-  handleMessageBatch?(messages: SQSMessage[]): Promise<void>;
 }
 
 export class Consumer extends EventEmitter {
   private queueUrl: string;
-  private handleMessage: (message: SQSMessage) => Promise<void>;
-  private handleMessageBatch: (message: SQSMessage[]) => Promise<void>;
+  private handleMessage: MessageHandler;
   private handleMessageTimeout: number;
+  private isBatchHandler: boolean;
   private attributeNames: string[];
   private messageAttributeNames: string[];
   private stopped: boolean;
@@ -105,7 +96,7 @@ export class Consumer extends EventEmitter {
     assertOptions(options);
     this.queueUrl = options.queueUrl;
     this.handleMessage = options.handleMessage;
-    this.handleMessageBatch = options.handleMessageBatch;
+    this.isBatchHandler = options.isBatchHandler;
     this.handleMessageTimeout = options.handleMessageTimeout;
     this.attributeNames = options.attributeNames || [];
     this.messageAttributeNames = options.messageAttributeNames || [];
@@ -150,8 +141,7 @@ export class Consumer extends EventEmitter {
 
     if (response) {
       if (hasMessages(response)) {
-        if (this.handleMessageBatch) {
-          // prefer handling messages in batch when available
+        if (this.isBatchHandler) {
           await this.processMessageBatch(response.Messages);
         } else {
           await Promise.all(response.Messages.map(this.processMessage));
@@ -213,15 +203,16 @@ export class Consumer extends EventEmitter {
   private async executeHandler(message: SQSMessage): Promise<void> {
     let timeout;
     let pending;
+    const handler = this.handleMessage as MessageHandlerIndividual;
     try {
       if (this.handleMessageTimeout) {
         [timeout, pending] = createTimeout(this.handleMessageTimeout);
         await Promise.race([
-          this.handleMessage(message),
+          handler(message),
           pending
         ]);
       } else {
-        await this.handleMessage(message);
+        await handler(message);
       }
     } catch (err) {
       if (err instanceof TimeoutError) {
@@ -333,8 +324,9 @@ export class Consumer extends EventEmitter {
   }
 
   private async executeBatchHandler(messages: SQSMessage[]): Promise<void> {
+    const handler = this.handleMessage as MessageHandlerBatch;
     try {
-      await this.handleMessageBatch(messages);
+      await handler(messages);
     } catch (err) {
       err.message = `Unexpected message handler failure: ${err.message}`;
       throw err;

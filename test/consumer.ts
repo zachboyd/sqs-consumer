@@ -48,8 +48,8 @@ describe('Consumer', () => {
   };
 
   beforeEach(() => {
-    handleMessage = sandbox.stub().resolves(null);
-    handleMessageBatch = sandbox.stub().resolves(null);
+    handleMessage = sandbox.stub().resolves();
+    handleMessageBatch = sandbox.stub().resolves();
     sqs = sandbox.mock();
     sqs.receiveMessage = stubResolve(response);
     sqs.deleteMessage = stubResolve();
@@ -67,25 +67,6 @@ describe('Consumer', () => {
 
   afterEach(() => {
     sandbox.restore();
-  });
-
-  it('requires a queueUrl to be set', () => {
-    assert.throws(() => {
-      Consumer.create({
-        region: 'some-region',
-        handleMessage
-      });
-    });
-  });
-
-  it('requires a handleMessage or handleMessagesBatch function to be set', () => {
-    assert.throws(() => {
-      new Consumer({
-        handleMessage: undefined,
-        region: 'some-region',
-        queueUrl: 'some-queue-url'
-      });
-    });
   });
 
   it('requires the batchSize option to be no greater than 10', () => {
@@ -170,7 +151,9 @@ describe('Consumer', () => {
       consumer = new Consumer({
         queueUrl: 'some-queue-url',
         region: 'some-region',
-        handleMessage: () => new Promise((resolve) => setTimeout(resolve, 1000)),
+        handleMessage: async () => {
+          await new Promise((resolve) => setTimeout(resolve, 1000));
+        },
         handleMessageTimeout,
         sqs,
         authenticationErrorTimeout: 20
@@ -566,7 +549,8 @@ describe('Consumer', () => {
         queueUrl: 'some-queue-url',
         messageAttributeNames: ['attribute-1', 'attribute-2'],
         region: 'some-region',
-        handleMessageBatch,
+        handleMessage: handleMessageBatch,
+        isBatchHandler: true,
         batchSize: 2,
         sqs
       });
@@ -576,26 +560,6 @@ describe('Consumer', () => {
       consumer.stop();
 
       sandbox.assert.callCount(handleMessageBatch, 1);
-    });
-
-    it('prefers handleMessagesBatch over handleMessage when both are set', async () => {
-      consumer = new Consumer({
-        queueUrl: 'some-queue-url',
-        messageAttributeNames: ['attribute-1', 'attribute-2'],
-        region: 'some-region',
-        handleMessageBatch,
-        handleMessage,
-        batchSize: 2,
-        sqs
-      });
-
-      consumer.start();
-      await pEvent(consumer, 'response_processed');
-      consumer.stop();
-
-      sandbox.assert.callCount(handleMessageBatch, 1);
-      sandbox.assert.callCount(handleMessage, 0);
-
     });
   });
 
