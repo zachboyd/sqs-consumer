@@ -15,7 +15,8 @@
     "lint:fix": "eslint . --fix",
     "coverage": "nyc mocha && nyc report --reporter=html && nyc report --reporter=json-summary",
     "lcov": "nyc mocha && nyc report --reporter=lcov",
-    "posttest": "npm run lint"
+    "posttest": "npm run lint",
+    "postinstall": "npm run build"
   },
   "repository": {
     "type": "git",
@@ -32,6 +33,8 @@
   ],
   "license": "Apache-2.0",
   "devDependencies": {
+    "@aws-sdk/client-sqs": "^3.31.0",
+    "@aws-sdk/smithy-client": "^3.31.0",
     "@types/chai": "^4.2.11",
     "@types/debug": "^4.1.5",
     "@types/mocha": "^7.0.2",
@@ -49,14 +52,13 @@
     "ts-node": "^8.10.2",
     "tslint-config-airbnb": "^5.11.2",
     "tslint-microsoft-contrib": "^6.2.0",
-    "typescript": "^3.9.5",
-    "aws-sdk": "^2.699.0"
+    "typescript": "^3.9.5"
   },
   "dependencies": {
     "debug": "^4.1.1"
   },
   "peerDependencies": {
-    "aws-sdk": "^2.699.0"
+    "@aws-sdk/client-sqs": "^3.31.0"
   },
   "nyc": {
     "include": [
