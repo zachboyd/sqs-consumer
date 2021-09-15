@@ -15,8 +15,7 @@
     "lint:fix": "eslint . --fix",
     "coverage": "nyc mocha && nyc report --reporter=html && nyc report --reporter=json-summary",
     "lcov": "nyc mocha && nyc report --reporter=lcov",
-    "posttest": "npm run lint",
-    "postinstall": "npm run build"
+    "posttest": "npm run lint"
   },
   "repository": {
     "type": "git",
